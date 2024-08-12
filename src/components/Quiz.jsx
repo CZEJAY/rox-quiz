@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import QuizHeader from "./QuizHeader";
+import QuizCard from "./QuizCard";
 
 const Loading = () => (
   <div className="h-[220px] w-[220px] mx-auto mt-8 flex flex-col justify-center items-center border-2 rounded-tr-[50%] rounded-bl-[50%]">
@@ -10,11 +11,10 @@ const Loading = () => (
 
 // Utility function to format time
 const formatTime = (seconds) => {
-    const minutes = Math.floor(seconds / 60);
-    const remainingSeconds = seconds % 60;
-    const formattedTime = `${String(minutes).padStart(2, "0")}:${String(remainingSeconds).padStart(2, "0")}`;
-    return formattedTime;
-  };
+  const minutes = Math.floor(seconds / 60);
+  const remainingSeconds = seconds % 60;
+  return `${String(minutes).padStart(2, "0")}:${String(remainingSeconds).padStart(2, "0")}`;
+};
 
 const Quiz = () => {
   const navigate = useNavigate();
@@ -23,9 +23,10 @@ const Quiz = () => {
   const [showResult, setShowResult] = useState(false);
   const [score, setScore] = useState(0);
   const [loading, setLoading] = useState(false);
-  const [timer, setTimer] = useState(60); 
+  const [timer, setTimer] = useState(60);
   const [timerIntervalId, setTimerIntervalId] = useState(null);
   const [status, setStatus] = useState("");
+  const [currentIndex, setCurrentIndex] = useState(0);
 
   useEffect(() => {
     fetch("/quiz.json")
@@ -36,26 +37,22 @@ const Quiz = () => {
     // Set up the timer interval
     const intervalId = setInterval(() => {
       setTimer((prevTimer) => {
-        // Check if the timer is greater than 0 before decrementing
-        return prevTimer > 0 ? prevTimer - 1 : prevTimer;
+        if (prevTimer <= 1) {
+          clearInterval(intervalId);
+          setShowResult(true);
+          return 0;
+        }
+        return prevTimer - 1;
       });
     }, 1000);
-   
+
     setTimerIntervalId(intervalId);
 
-    
-    return () => {
-      clearInterval(intervalId);
-      if (timer <= 0) {
-        setShowResult(true);
-      }
-    };
-  }, [timer]);
+    return () => clearInterval(intervalId);
+  }, []);
 
   const handleAnswerSelect = (questionId, selectedOption) => {
-    // Handle answer selection logic here
-    const updatedAnswers = { ...answers, [questionId]: selectedOption };
-    setAnswers(updatedAnswers);
+    setAnswers((prevAnswers) => ({ ...prevAnswers, [questionId]: selectedOption }));
   };
 
   const handleSubmit = () => {
@@ -69,85 +66,70 @@ const Quiz = () => {
       const quizScore = calculateScore(answers);
       setScore(quizScore);
       const percentage = (quizScore / questions.length) * 100;
-      // Determine the status based on the percentage
-      const newStatus = percentage >= 50 ? "Passed" : "Failed";
-      setStatus(newStatus);
-
+      setStatus(percentage >= 50 ? "Passed" : "Failed");
       setShowResult(true);
       setLoading(false);
-    }, 5000);
+    }, 500);
   };
 
   const calculateScore = (userAnswers) => {
-    const correctAnswers = questions.map((question) => question.answer);
-    let score = 0;
-    for (const questionId in userAnswers) {
-      if (userAnswers[questionId] === correctAnswers[questionId - 1]) {
-        score++;
-      }
-    }
-    return score;
+    return questions.reduce((score, question, index) => 
+      userAnswers[index + 1] === question.answer ? score + 1 : score, 0);
   };
 
-  // Reset states and reload the page
   const restartQuiz = () => {
     setAnswers({});
     setScore(0);
+    setCurrentIndex(0);
     setShowResult(false);
     setLoading(false);
-    setTimer(60); 
-    navigate("/quiz"); 
+    setTimer(60);
+    navigate("/quiz");
+  };
+
+  const handleNext = () => {
+    setCurrentIndex((prev) => Math.min(prev + 1, questions.length - 1));
+  };
+
+  const handlePrev = () => {
+    setCurrentIndex((prev) => Math.max(prev - 1, 0));
   };
 
   return (
     <section>
       <QuizHeader timer={timer} />
       <div className="md:w-9/12 w-[90%] flex md:flex-row flex-col mx-auto">
-        {/* question section */}
+        {/* Question section */}
         <div className="md:w-[70%] w-full">
           <div>
-            {questions.map((question, index) => (
-              <div
-                key={question.id}
-                className="m-3 py-3 px-4 shadow-sm border border-gray-200 rounded "
-              >
-                <p className="flex items-center rounded text-xs p-2 cursor-pointer">
-                  <span className="h-8 w-8 bg-[#FCC822] rounded-full flex justify-center items-center text-green-800 mr-3">
-                    {index + 1}
-                  </span>
-                  <p className="">{question.question}</p>
-                </p>
-                <div className="grid grid-cols-2 gap-4 mt-5">
-                  {question.options.map((option, index) => (
-                    <div
-                      className={`border border-gray-200 rounded text-xs p-2 cursor-pointer ${
-                        answers[question.id] === option ? "bg-gray-300" : ""
-                      }`}
-                      key={option}
-                      onClick={() => handleAnswerSelect(question.id, option)}
-                    >
-                      <p className="text-[10px] mb-1">Option {index + 1}</p>
-                      <p>{option}</p>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ))}
-            <button onClick={handleSubmit} className="bg-[#FCC822] px-6 py-2 text-white rounded">
-              Submit Quiz
-            </button>
+            {questions.length > 0 && 
+              <QuizCard 
+                item={questions[currentIndex]} 
+                index={currentIndex} 
+                answers={answers} 
+                handleAnswerSelect={({ id, option }) => handleAnswerSelect(id, option)} 
+              />
+            }
+            <div className="flex w-full items-center justify-between">
+              {currentIndex > 0 && 
+                <button onClick={handlePrev} className="text-yellow-300 px-2 py-2 border rounded">Previous</button>
+              }
+              <button onClick={currentIndex >= questions.length - 1 ? handleSubmit : handleNext} className="bg-[#FCC822] ml-auto px-4 py-2 text-white rounded">
+                {currentIndex === questions.length - 1 ? "Submit" : "Next"}
+              </button>
+            </div>
           </div>
         </div>
 
-        {/* answer  section*/}
+        {/* Result section */}
         <div className="md:w-[30%] w-full p-4">
           {showResult && (
             <div>
               <h3 className="text-2xl font-medium">Your Score: </h3>
               <div className="h-[220px] w-[220px] mx-auto mt-8 flex flex-col justify-center items-center border-2 rounded-tr-[50%] rounded-bl-[50%]">
-              <h3 className={`text-xl ${status === "Passed" ? "text-green-800" : "text-red-500"}`}>
-              {status}
-            </h3>
+                <h3 className={`text-xl ${status === "Passed" ? "text-green-800" : "text-red-500"}`}>
+                  {status}
+                </h3>
                 <h1 className="text-3xl font-bold my-2">
                   {score * 10}
                   <span className="text-slate-800">/60</span>
@@ -175,6 +157,5 @@ const Quiz = () => {
     </section>
   );
 };
-
 
 export default Quiz;
