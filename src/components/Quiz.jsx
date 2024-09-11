@@ -16,6 +16,14 @@ const formatTime = (seconds) => {
   return `${String(minutes).padStart(2, "0")}:${String(remainingSeconds).padStart(2, "0")}`;
 };
 
+export const shuffleArray = (array) => {
+  for (let i = array.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [array[i], array[j]] = [array[j], array[i]];
+  }
+  return array;
+};
+
 const Quiz = () => {
   const navigate = useNavigate();
   const [questions, setQuestions] = useState([]);
@@ -31,7 +39,10 @@ const Quiz = () => {
   useEffect(() => {
     fetch("/quiz.json")
       .then((response) => response.json())
-      .then((data) => setQuestions(data))
+      .then((data) => {
+        const shuffledQuestions = shuffleArray(data)
+        setQuestions(shuffledQuestions)
+      })
       .catch((error) => console.error("Error fetching quiz data:", error));
 
     // Set up the timer interval
@@ -74,7 +85,7 @@ const Quiz = () => {
 
   const calculateScore = (userAnswers) => {
     return questions.reduce((score, question, index) => 
-      userAnswers[index + 1] === question.answer ? score + 1 : score, 0);
+      userAnswers[question.id] === question.answer ? score + 1 : score, 0);
   };
 
   const restartQuiz = () => {
